@@ -6,6 +6,5 @@ weight: 20
 featured: true
 ---
 
-Each guide is built around a job rather than a command. Add one per real task as
-you build out csdn. They assume you have run the
-[quick start](/getting-started/quick-start/).
+Each guide is built around a job rather than a command. They assume you have run
+the [quick start](/getting-started/quick-start/).

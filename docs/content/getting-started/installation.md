@@ -1,40 +1,50 @@
 ---
 title: "Installation"
-description: "Install csdn from a release, with go install, or from source."
+description: "Get the csdn binary."
 weight: 20
 ---
 
-## Prebuilt binaries
+## Homebrew
 
-Every [release](https://github.com/tamnd/csdn-cli/releases) carries archives for Linux, macOS,
-and Windows on amd64 and arm64, plus deb, rpm, and apk packages for Linux.
-Download, unpack, put `csdn` on your `PATH`, done. The `checksums.txt`
-on each release is signed with keyless [cosign](https://docs.sigstore.dev/) if
-you want to verify before running.
+```bash
+brew install tamnd/tap/csdn
+```
 
-## With Go
+## Pre-built binaries
+
+Download the archive for your platform from
+[Releases](https://github.com/tamnd/csdn-cli/releases), extract it, and place
+`csdn` on your `$PATH`. Each release carries archives for Linux, macOS, Windows,
+and FreeBSD across amd64 and arm64, with a signed `checksums.txt` you can verify
+with keyless [cosign](https://docs.sigstore.dev/).
+
+## Go
 
 ```bash
 go install github.com/tamnd/csdn-cli/cmd/csdn@latest
 ```
 
-That puts `csdn` in `$(go env GOPATH)/bin`, which is `~/go/bin` unless
-you moved it. Make sure that directory is on your `PATH`.
+That puts `csdn` in `$(go env GOPATH)/bin`, which is `~/go/bin` unless you moved
+it. Make sure that directory is on your `$PATH`.
 
-## From source
-
-```bash
-git clone https://github.com/tamnd/csdn-cli
-cd csdn-cli
-make build        # produces ./bin/csdn
-./bin/csdn version
-```
-
-## Container image
+## Docker
 
 ```bash
-docker run --rm ghcr.io/tamnd/csdn:latest --help
+docker run --rm ghcr.io/tamnd/csdn:latest hot
 ```
+
+## Linux packages
+
+`deb`, `rpm`, and `apk` packages are available on the
+[Releases](https://github.com/tamnd/csdn-cli/releases) page.
+
+## Shell completion
+
+```bash
+csdn completion bash    # or zsh, fish, powershell
+```
+
+Run `csdn completion <shell> --help` for where to install the script.
 
 ## Checking the install
 

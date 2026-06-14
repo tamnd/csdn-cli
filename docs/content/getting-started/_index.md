@@ -7,6 +7,6 @@ featured: true
 ---
 
 Three short pages: the [introduction](/getting-started/introduction/) for how
-csdn is put together, [installation](/getting-started/installation/) to
-get the binary, and the [quick start](/getting-started/quick-start/) to run
-something real.
+csdn is put together, [installation](/getting-started/installation/) to get the
+binary, and the [quick start](/getting-started/quick-start/) to run something
+real.
