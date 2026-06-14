@@ -1,6 +1,6 @@
 title       = "csdn"
 baseURL     = "https://csdn-cli.tamnd.com/"
-description = "Browse CSDN Chinese developer articles"
+description = "A command line for CSDN (CSDN博客), China's largest developer-blog community."
 contentDir  = "content"
 outputDir   = "public"
 theme       = "tago-doks"

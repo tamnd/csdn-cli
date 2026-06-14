@@ -4,21 +4,21 @@ description: "The output contract every command shares: formats, fields, and tem
 weight: 30
 ---
 
-Every list command in the fleet renders through one formatter, so the same flags
-work everywhere. Wire your commands through it as you add them, and this page
-describes what users get. Pick a format with `-o`, or let csdn choose:
-a table when writing to a terminal, JSONL when piped.
+Every read command renders through one formatter, so the same flags work
+everywhere. Pick a format with `-o`, or let csdn choose: a table when writing to
+a terminal, JSONL when piped.
 
 ## Formats
 
 ```bash
-csdn <command> -o table   # aligned columns for reading
-csdn <command> -o jsonl   # one JSON object per line, for piping
-csdn <command> -o json    # a single JSON array
-csdn <command> -o csv     # spreadsheet friendly
-csdn <command> -o tsv     # tab-separated
-csdn <command> -o url     # just the URL column
-csdn <command> -o raw     # the underlying bytes, unformatted
+csdn <command> -o table      # aligned columns for reading
+csdn <command> -o jsonl      # one JSON object per line, for piping
+csdn <command> -o json       # a single JSON array
+csdn <command> -o markdown   # a Markdown table
+csdn <command> -o csv        # spreadsheet friendly
+csdn <command> -o tsv        # tab-separated
+csdn <command> -o url        # just the url field
+csdn <command> -o raw        # the record's body field, one per line
 ```
 
 | Format | Best for |
@@ -26,20 +26,24 @@ csdn <command> -o raw     # the underlying bytes, unformatted
 | `table` | Reading on a terminal |
 | `jsonl` | Piping into another tool, one object at a time |
 | `json` | Loading a whole result as an array |
+| `markdown` | Pasting a table into a document |
 | `csv` / `tsv` | Spreadsheets and quick column math |
 | `url` | Feeding URLs into other commands |
-| `raw` | The unformatted bytes (response bodies, file contents) |
+| `raw` | The record's text body (the `content` of an article, the `text` of a comment) |
+
+Long text fields are truncated in `table` output to fit; `json`, `jsonl`, `csv`,
+and `tsv` carry the full untruncated value.
 
 ## Narrowing columns
 
-Keep only the fields you want:
+Keep only the fields you want, by their lowercase JSON key:
 
 ```bash
-csdn <command> --fields id,title,url
+csdn hot --fields rank,title,score
 ```
 
-`--no-header` drops the header row in `table` and `csv` output, which helps when
-a downstream tool expects bare rows.
+`--no-header` drops the header row in `table`, `csv`, and `tsv` output, which
+helps when a downstream tool expects bare rows.
 
 ## Templating rows
 
@@ -47,7 +51,7 @@ For full control over each line, apply a Go text/template. Fields are the JSON
 keys, capitalised:
 
 ```bash
-csdn <command> --template '{{.URL}} {{.Title}}'
+csdn hot --template '{{.Rank}} {{.Title}} {{.Score}}'
 ```
 
 ## Why auto-detection helps
@@ -56,8 +60,8 @@ Because the default adapts to the destination, the same command reads well by
 hand and parses cleanly in a pipe:
 
 ```bash
-csdn <command>            # a table, because this is a terminal
-csdn <command> | wc -l    # JSONL, because this is a pipe
+csdn hot            # a table, because this is a terminal
+csdn hot | wc -l    # JSONL, because this is a pipe
 ```
 
 You only reach for `-o` when you want something other than that default.
