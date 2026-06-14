@@ -18,6 +18,10 @@ var (
 	reDescription = regexp.MustCompile(`(?is)<meta[^>]*name="description"[^>]*content="([^"]*)"`)
 	reReadSpan    = regexp.MustCompile(`(?is)<span[^>]*class="read-count"[^>]*>(.*?)</span>`)
 	reContentDiv  = regexp.MustCompile(`(?is)<div[^>]*id="content_views"[^>]*>(.*)`)
+	reDiggNum     = regexp.MustCompile(`(?is)id="blog-digg-num"[^>]*>([0-9,\s]*)<`)
+	reCollectTag  = regexp.MustCompile(`(?is)<[a-z][^>]*id="get-collection"[^>]*>`)
+	reDataNum     = regexp.MustCompile(`data-num="(\d+)"`)
+	reCommentNum  = regexp.MustCompile(`(?is)class="unlogin-comment-tit"[^>]*>(\d+)`)
 )
 
 // Hot fetches the hot-rank board and returns up to limit ranked entries.
@@ -151,6 +155,19 @@ func parseArticle(html, username, id, fullURL string) articlePieces {
 			p.Views, _ = strconv.ParseInt(n, 10, 64)
 		}
 	}
+	if m := reDiggNum.FindStringSubmatch(html); m != nil {
+		if n := firstInt(m[1]); n != "" {
+			p.Likes, _ = strconv.ParseInt(n, 10, 64)
+		}
+	}
+	if tag := reCollectTag.FindString(html); tag != "" {
+		if m := reDataNum.FindStringSubmatch(tag); m != nil {
+			p.Collects, _ = strconv.ParseInt(m[1], 10, 64)
+		}
+	}
+	if m := reCommentNum.FindStringSubmatch(html); m != nil {
+		p.Comments, _ = strconv.ParseInt(m[1], 10, 64)
+	}
 	if m := reContentDiv.FindStringSubmatch(html); m != nil {
 		p.Content = stripTags(closeAtDiv(m[1]))
 	}
@@ -282,7 +299,9 @@ func (c *Client) Posts(ctx context.Context, username string, limit int) ([]Artic
 }
 
 // Comments pages the comment list under an article and returns up to limit
-// top-level comments.
+// comments, flattening each thread so top-level comments and their replies
+// (which CSDN nests under "sub") both appear. A reply carries its parentId, so
+// the thread can be reconstructed from the flat stream.
 func (c *Client) Comments(ctx context.Context, articleID string, limit int) ([]Comment, error) {
 	if limit <= 0 {
 		limit = 50
@@ -311,6 +330,12 @@ func (c *Client) Comments(ctx context.Context, articleID string, limit int) ([]C
 			out = append(out, commentFrom(node.Info))
 			if len(out) >= limit {
 				return out[:limit], nil
+			}
+			for _, sub := range node.Sub {
+				out = append(out, commentFrom(sub))
+				if len(out) >= limit {
+					return out[:limit], nil
+				}
 			}
 		}
 		if len(res.Data.List) < size {

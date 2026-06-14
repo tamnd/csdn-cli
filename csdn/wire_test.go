@@ -70,7 +70,8 @@ func TestHotFrom(t *testing.T) {
 		"hotRankScore":"500","pcHotRankScore":"900","nickName":"Alice",
 		"userName":"alice","articleTitle":"A Go primer",
 		"articleDetailUrl":"https://blog.csdn.net/alice/article/details/1",
-		"commentCount":"12","favorCount":"34","viewCount":"5600"
+		"commentCount":"12","favorCount":"34","viewCount":"5600",
+		"avatarUrl":"https://a.png","picList":["https://cover.png","https://b.png"]
 	}`
 	var raw rawHotItem
 	if err := json.Unmarshal([]byte(in), &raw); err != nil {
@@ -86,12 +87,16 @@ func TestHotFrom(t *testing.T) {
 	if h.URL != "https://blog.csdn.net/alice/article/details/1" {
 		t.Errorf("hotFrom url = %q", h.URL)
 	}
+	if h.Cover != "https://cover.png" || h.Avatar != "https://a.png" {
+		t.Errorf("hotFrom media = cover=%q avatar=%q", h.Cover, h.Avatar)
+	}
 }
 
 func TestHitFrom(t *testing.T) {
 	const in = `{
 		"title":"a <em>Go</em> guide","url":"https://blog.csdn.net/bob/article/details/2",
 		"nickname":"Bob","username":"bob","view_num":1200,"digg":"7","comment":"3",
+		"collections":"40","create_time_str":"2024-08-09","tags":["go","web"],
 		"type":"blog","articleid":"2","description":"all about <em>Go</em>"
 	}`
 	var raw rawSearchHit
@@ -105,8 +110,23 @@ func TestHitFrom(t *testing.T) {
 	if h.Type != "blog" || h.ID != "2" || h.Username != "bob" || h.Author != "Bob" {
 		t.Errorf("hitFrom basics = %+v", h)
 	}
-	if h.Views != 1200 || h.Likes != 7 || h.Comments != 3 {
+	if h.Views != 1200 || h.Likes != 7 || h.Comments != 3 || h.Collects != 40 {
 		t.Errorf("hitFrom counts = %+v", h)
+	}
+	if h.Published != "2024-08-09" || len(h.Tags) != 2 || h.Tags[0] != "go" {
+		t.Errorf("hitFrom published/tags = %+v", h)
+	}
+}
+
+func TestHitFromPublishedFallback(t *testing.T) {
+	// When create_time_str is absent, fall back to created_at.
+	const in = `{"articleid":"3","created_at":"2024-01-02 03:04:05","type":"blog"}`
+	var raw rawSearchHit
+	if err := json.Unmarshal([]byte(in), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if h := hitFrom(raw); h.Published != "2024-01-02 03:04:05" {
+		t.Errorf("published fallback = %q", h.Published)
 	}
 }
 
@@ -114,7 +134,7 @@ func TestCommentFrom(t *testing.T) {
 	const in = `{
 		"commentId":1001,"articleId":2002,"parentId":0,"postTime":"2024-01-02",
 		"content":"  nice post  ","userName":"carol","nickName":"Carol","digg":5,
-		"region":"Beijing","dateFormat":"1 day ago"
+		"avatar":"https://c.png","region":"IP：Beijing","dateFormat":"1 day ago"
 	}`
 	var raw rawCommentInfo
 	if err := json.Unmarshal([]byte(in), &raw); err != nil {
@@ -127,11 +147,36 @@ func TestCommentFrom(t *testing.T) {
 	if c.Text != "nice post" || c.Author != "carol" || c.Nickname != "Carol" {
 		t.Errorf("commentFrom text/author = %+v", c)
 	}
-	if c.Likes != 5 || c.Region != "Beijing" || c.PostTime != "1 day ago" {
+	if c.Likes != 5 || c.Region != "Beijing" || c.PostTime != "1 day ago" || c.Avatar != "https://c.png" {
 		t.Errorf("commentFrom meta = %+v", c)
 	}
 	if c.URL != userURL("carol") {
 		t.Errorf("commentFrom url = %q", c.URL)
+	}
+}
+
+func TestCommentNodeRepliesUnderSub(t *testing.T) {
+	// CSDN nests replies under "sub" as flat comment objects, and a reply
+	// carries its parentId and parentNickName.
+	const in = `{
+		"info":{"commentId":1,"articleId":9,"content":"top","userName":"a","nickName":"A"},
+		"sub":[
+			{"commentId":2,"articleId":9,"parentId":1,"parentNickName":"A","content":"reply","userName":"b","nickName":"B","region":"IP：浙江省"}
+		]
+	}`
+	var node rawCommentNode
+	if err := json.Unmarshal([]byte(in), &node); err != nil {
+		t.Fatal(err)
+	}
+	if len(node.Sub) != 1 {
+		t.Fatalf("expected 1 reply under sub, got %d", len(node.Sub))
+	}
+	r := commentFrom(node.Sub[0])
+	if r.ID != "2" || r.ParentID != "1" || r.ParentNick != "A" || r.Author != "b" {
+		t.Errorf("reply = %+v", r)
+	}
+	if r.Text != "reply" || r.Region != "浙江省" {
+		t.Errorf("reply text/region = %+v", r)
 	}
 }
 
@@ -161,6 +206,9 @@ func TestParseArticleHTML(t *testing.T) {
 <h1 class="title-article" id="articleContentId">My Title</h1>
 <script>var articleId = 123456;</script>
 <span class="read-count">587 阅读</span>
+<span class="read-count" id="blog-digg-num"> 42 </span>
+<a class="get-collection " data-num="41" id="get-collection">收藏</a>
+<span class="unlogin-comment-tit">30</span>
 <div id="content_views" class="markdown_views"><p>Hello <b>world</b></p><div>nested</div></div>
 <div>after</div>
 </body></html>`
@@ -170,6 +218,9 @@ func TestParseArticleHTML(t *testing.T) {
 	}
 	if p.ID != "123456" {
 		t.Errorf("id = %q", p.ID)
+	}
+	if p.Likes != 42 || p.Collects != 41 || p.Comments != 30 {
+		t.Errorf("counters = likes=%d collects=%d comments=%d", p.Likes, p.Collects, p.Comments)
 	}
 	if p.Published != "2024-01-01" || p.Updated != "2024-02-01" || p.Author != "Alice" {
 		t.Errorf("ld-json = %+v", p)
@@ -189,5 +240,8 @@ func TestParseArticleHTML(t *testing.T) {
 	a := articleFrom(p)
 	if a.ID != "123456" || a.Title != "My Title" || a.Views != 587 {
 		t.Errorf("articleFrom = %+v", a)
+	}
+	if a.Likes != 42 || a.Collects != 41 || a.Comments != 30 {
+		t.Errorf("articleFrom counters = %+v", a)
 	}
 }

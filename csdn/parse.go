@@ -47,7 +47,7 @@ func ParseArticleRef(in string) (username, id string, err error) {
 		return m[1], m[2], nil
 	}
 	if reDigits.MatchString(in) {
-		return "", "", errors.New("a bare article id is ambiguous on CSDN — pass the full url or username/id")
+		return "", "", errors.New("a bare article id is ambiguous on CSDN; pass the full url or username/id")
 	}
 	return "", "", errors.New("could not read an article reference from " + in)
 }
