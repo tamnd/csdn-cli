@@ -9,10 +9,10 @@ tools. No API key, nothing to run alongside it.
 ## Install
 
 ```bash
-go install github.com/tamnd/csdn-cli-cli/cmd/csdn@latest
+go install github.com/tamnd/csdn-cli/cmd/csdn@latest
 ```
 
-Or grab a prebuilt binary from the [releases](https://github.com/tamnd/csdn-cli-cli/releases), or run
+Or grab a prebuilt binary from the [releases](https://github.com/tamnd/csdn-cli/releases), or run
 the container image:
 
 ```bash
