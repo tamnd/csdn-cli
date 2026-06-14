@@ -20,6 +20,8 @@ type Hot struct {
 	Comments int64  `json:"comments"`
 	Favors   int64  `json:"favors"`
 	URL      string `json:"url"`
+	Cover    string `json:"cover"`
+	Avatar   string `json:"avatar"`
 }
 
 // Article is a single blog post with its body and counters.
@@ -37,6 +39,7 @@ type Article struct {
 	Likes     int64    `json:"likes"`
 	Collects  int64    `json:"collects"`
 	Comments  int64    `json:"comments"`
+	Pinned    bool     `json:"pinned"`
 	URL       string   `json:"url"`
 }
 
@@ -69,28 +72,33 @@ type User struct {
 
 // Comment is one comment under an article, with its parent id for replies.
 type Comment struct {
-	ID        string `json:"id" kit:"id"`
-	ArticleID string `json:"article_id"`
-	Text      string `json:"text" kit:"body" table:"text,truncate"`
-	Author    string `json:"author"`
-	Nickname  string `json:"nickname"`
-	ParentID  string `json:"parent_id"`
-	PostTime  string `json:"post_time"`
-	Likes     int64  `json:"likes"`
-	Region    string `json:"region"`
-	URL       string `json:"url"`
+	ID         string `json:"id" kit:"id"`
+	ArticleID  string `json:"article_id"`
+	Text       string `json:"text" kit:"body" table:"text,truncate"`
+	Author     string `json:"author"`
+	Nickname   string `json:"nickname"`
+	ParentID   string `json:"parent_id"`
+	ParentNick string `json:"parent_nick"`
+	PostTime   string `json:"post_time"`
+	Likes      int64  `json:"likes"`
+	Region     string `json:"region"`
+	Avatar     string `json:"avatar"`
+	URL        string `json:"url"`
 }
 
 // SearchHit is a thin, normalized search result row.
 type SearchHit struct {
-	Type     string `json:"type"`
-	ID       string `json:"id" kit:"id"`
-	Title    string `json:"title" table:"title,truncate"`
-	Author   string `json:"author"`
-	Username string `json:"username"`
-	Summary  string `json:"summary" table:"summary,truncate"`
-	Views    int64  `json:"views"`
-	Likes    int64  `json:"likes"`
-	Comments int64  `json:"comments"`
-	URL      string `json:"url"`
+	Type      string   `json:"type"`
+	ID        string   `json:"id" kit:"id"`
+	Title     string   `json:"title" table:"title,truncate"`
+	Author    string   `json:"author"`
+	Username  string   `json:"username"`
+	Summary   string   `json:"summary" table:"summary,truncate"`
+	Published string   `json:"published"`
+	Tags      []string `json:"tags"`
+	Views     int64    `json:"views"`
+	Likes     int64    `json:"likes"`
+	Collects  int64    `json:"collects"`
+	Comments  int64    `json:"comments"`
+	URL       string   `json:"url"`
 }

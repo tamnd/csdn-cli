@@ -22,7 +22,7 @@ func (f *flexInt) UnmarshalJSON(b []byte) error {
 		if err := json.Unmarshal(b, &s); err != nil {
 			return err
 		}
-		// CSDN formats counters for display, e.g. "146,206" — drop the commas
+		// CSDN formats counters for display, e.g. "146,206", so drop the commas
 		// before parsing.
 		s = strings.ReplaceAll(s, ",", "")
 		if s == "" {
@@ -59,21 +59,27 @@ type rawHotResp struct {
 }
 
 type rawHotItem struct {
-	HotRankScore     flexInt `json:"hotRankScore"`
-	PcHotRankScore   flexInt `json:"pcHotRankScore"`
-	NickName         string  `json:"nickName"`
-	UserName         string  `json:"userName"`
-	ArticleTitle     string  `json:"articleTitle"`
-	ArticleDetailURL string  `json:"articleDetailUrl"`
-	CommentCount     flexInt `json:"commentCount"`
-	FavorCount       flexInt `json:"favorCount"`
-	ViewCount        flexInt `json:"viewCount"`
+	HotRankScore     flexInt  `json:"hotRankScore"`
+	PcHotRankScore   flexInt  `json:"pcHotRankScore"`
+	NickName         string   `json:"nickName"`
+	UserName         string   `json:"userName"`
+	ArticleTitle     string   `json:"articleTitle"`
+	ArticleDetailURL string   `json:"articleDetailUrl"`
+	CommentCount     flexInt  `json:"commentCount"`
+	FavorCount       flexInt  `json:"favorCount"`
+	ViewCount        flexInt  `json:"viewCount"`
+	AvatarURL        string   `json:"avatarUrl"`
+	PicList          []string `json:"picList"`
 }
 
 func hotFrom(rank int, it rawHotItem) Hot {
 	score := int64(it.PcHotRankScore)
 	if score == 0 {
 		score = int64(it.HotRankScore)
+	}
+	cover := ""
+	if len(it.PicList) > 0 {
+		cover = it.PicList[0]
 	}
 	return Hot{
 		Rank:     rank,
@@ -85,6 +91,8 @@ func hotFrom(rank int, it rawHotItem) Hot {
 		Comments: int64(it.CommentCount),
 		Favors:   int64(it.FavorCount),
 		URL:      it.ArticleDetailURL,
+		Cover:    cover,
+		Avatar:   it.AvatarURL,
 	}
 }
 
@@ -96,17 +104,21 @@ type rawSearchResp struct {
 }
 
 type rawSearchHit struct {
-	Title       string  `json:"title"`
-	URL         string  `json:"url"`
-	Nickname    string  `json:"nickname"`
-	Username    string  `json:"username"`
-	ViewNum     flexInt `json:"view_num"`
-	View        flexInt `json:"view"`
-	Digg        flexInt `json:"digg"`
-	Comment     flexInt `json:"comment"`
-	Type        string  `json:"type"`
-	ArticleID   string  `json:"articleid"`
-	Description string  `json:"description"`
+	Title         string  `json:"title"`
+	URL           string  `json:"url"`
+	Nickname      string  `json:"nickname"`
+	Username      string  `json:"username"`
+	ViewNum       flexInt `json:"view_num"`
+	View          flexInt `json:"view"`
+	Digg          flexInt `json:"digg"`
+	Comment       flexInt `json:"comment"`
+	Type          string  `json:"type"`
+	ArticleID     string  `json:"articleid"`
+	Description   string  `json:"description"`
+	CreateTimeStr string  `json:"create_time_str"`
+	CreatedAt     string  `json:"created_at"`
+	Tags          rawTags `json:"tags"`
+	Collections   flexInt `json:"collections"`
 }
 
 func hitFrom(h rawSearchHit) SearchHit {
@@ -118,17 +130,24 @@ func hitFrom(h rawSearchHit) SearchHit {
 	if typ == "" {
 		typ = "blog"
 	}
+	published := h.CreateTimeStr
+	if published == "" {
+		published = h.CreatedAt
+	}
 	return SearchHit{
-		Type:     typ,
-		ID:       h.ArticleID,
-		Title:    stripEm(h.Title),
-		Author:   h.Nickname,
-		Username: h.Username,
-		Summary:  stripEm(h.Description),
-		Views:    views,
-		Likes:    int64(h.Digg),
-		Comments: int64(h.Comment),
-		URL:      h.URL,
+		Type:      typ,
+		ID:        h.ArticleID,
+		Title:     stripEm(h.Title),
+		Author:    h.Nickname,
+		Username:  h.Username,
+		Summary:   stripEm(h.Description),
+		Published: published,
+		Tags:      []string(h.Tags),
+		Views:     views,
+		Likes:     int64(h.Digg),
+		Collects:  int64(h.Collections),
+		Comments:  int64(h.Comment),
+		URL:       h.URL,
 	}
 }
 
@@ -147,6 +166,9 @@ type articlePieces struct {
 	Updated   string
 	Author    string
 	Views     int64
+	Likes     int64
+	Collects  int64
+	Comments  int64
 	URL       string
 }
 
@@ -162,6 +184,9 @@ func articleFrom(p articlePieces) Article {
 		Published: p.Published,
 		Updated:   p.Updated,
 		Views:     p.Views,
+		Likes:     p.Likes,
+		Collects:  p.Collects,
+		Comments:  p.Comments,
 		URL:       p.URL,
 	}
 }
@@ -229,6 +254,17 @@ type rawViewCount struct {
 	Total flexInt `json:"total"`
 }
 
+// cleanRegion drops the display prefix CSDN puts in front of an IP region. A
+// profile reads "IP 属地：河南省" and a comment reads "IP：浙江省"; both reduce to
+// the bare place name.
+func cleanRegion(s string) string {
+	s = strings.TrimSpace(s)
+	for _, p := range []string{"IP 属地：", "IP属地：", "IP 属地:", "IP：", "IP:"} {
+		s = strings.TrimPrefix(s, p)
+	}
+	return strings.TrimSpace(s)
+}
+
 // genderText maps the CSDN gender code to a label. 1 is male, 2 is female;
 // anything else is unknown and reported as empty.
 func genderText(code int64) string {
@@ -264,15 +300,13 @@ func userFrom(st rawInitialState, tab rawTabTotalResp, username string) User {
 	if um.Level != 0 {
 		level = strconv.FormatInt(int64(um.Level), 10)
 	}
-	region := strings.TrimSpace(um.Region.Region)
-	region = strings.TrimPrefix(region, "IP 属地：")
 	return User{
 		Username:      name,
 		Nickname:      um.Nickname,
 		Intro:         um.Introduction,
 		Level:         level,
 		CodeAge:       um.CodeAge.Desc,
-		Region:        region,
+		Region:        cleanRegion(um.Region.Region),
 		School:        um.School,
 		Company:       um.Company,
 		Registered:    um.RegistrationTime,
@@ -378,6 +412,7 @@ func postFrom(username string, it rawBusinessItem) Article {
 		Likes:     int64(it.DiggCount),
 		Collects:  int64(it.CollectCount),
 		Comments:  int64(it.CommentCount),
+		Pinned:    it.Top,
 		URL:       url,
 	}
 }
@@ -393,22 +428,27 @@ type rawCommentResp struct {
 	} `json:"data"`
 }
 
+// rawCommentNode is one top-level comment thread. CSDN nests its replies under
+// "sub" (not "reply"), and each sub entry is a flat comment object rather than
+// another node, so Sub holds rawCommentInfo directly.
 type rawCommentNode struct {
-	Info  rawCommentInfo   `json:"info"`
-	Reply []rawCommentNode `json:"reply"`
+	Info rawCommentInfo   `json:"info"`
+	Sub  []rawCommentInfo `json:"sub"`
 }
 
 type rawCommentInfo struct {
-	CommentID  flexInt `json:"commentId"`
-	ArticleID  flexInt `json:"articleId"`
-	ParentID   flexInt `json:"parentId"`
-	PostTime   string  `json:"postTime"`
-	Content    string  `json:"content"`
-	UserName   string  `json:"userName"`
-	NickName   string  `json:"nickName"`
-	Digg       flexInt `json:"digg"`
-	Region     string  `json:"region"`
-	DateFormat string  `json:"dateFormat"`
+	CommentID      flexInt `json:"commentId"`
+	ArticleID      flexInt `json:"articleId"`
+	ParentID       flexInt `json:"parentId"`
+	ParentNickName string  `json:"parentNickName"`
+	PostTime       string  `json:"postTime"`
+	Content        string  `json:"content"`
+	UserName       string  `json:"userName"`
+	NickName       string  `json:"nickName"`
+	Avatar         string  `json:"avatar"`
+	Digg           flexInt `json:"digg"`
+	Region         string  `json:"region"`
+	DateFormat     string  `json:"dateFormat"`
 }
 
 func commentFrom(in rawCommentInfo) Comment {
@@ -422,15 +462,17 @@ func commentFrom(in rawCommentInfo) Comment {
 	}
 	username := in.UserName
 	return Comment{
-		ID:        strconv.FormatInt(int64(in.CommentID), 10),
-		ArticleID: strconv.FormatInt(int64(in.ArticleID), 10),
-		Text:      strings.TrimSpace(in.Content),
-		Author:    username,
-		Nickname:  in.NickName,
-		ParentID:  parent,
-		PostTime:  post,
-		Likes:     int64(in.Digg),
-		Region:    in.Region,
-		URL:       userURL(username),
+		ID:         strconv.FormatInt(int64(in.CommentID), 10),
+		ArticleID:  strconv.FormatInt(int64(in.ArticleID), 10),
+		Text:       strings.TrimSpace(in.Content),
+		Author:     username,
+		Nickname:   in.NickName,
+		ParentID:   parent,
+		ParentNick: in.ParentNickName,
+		PostTime:   post,
+		Likes:      int64(in.Digg),
+		Region:     cleanRegion(in.Region),
+		Avatar:     in.Avatar,
+		URL:        userURL(username),
 	}
 }
