@@ -66,12 +66,16 @@ func TestUserFromProfileShape(t *testing.T) {
 }
 
 func TestHotFrom(t *testing.T) {
+	// hotRankScore is the exact integer; pcHotRankScore is CSDN's display form
+	// ("2.4w"), which is lossy and does not parse, so hotFrom must take the exact
+	// one. productId/productType carry the article id and kind.
 	const in = `{
-		"hotRankScore":"500","pcHotRankScore":"900","nickName":"Alice",
+		"hotRankScore":"24056","pcHotRankScore":"2.4w","nickName":"Alice",
 		"userName":"alice","articleTitle":"A Go primer",
 		"articleDetailUrl":"https://blog.csdn.net/alice/article/details/1",
 		"commentCount":"12","favorCount":"34","viewCount":"5600",
-		"avatarUrl":"https://a.png","picList":["https://cover.png","https://b.png"]
+		"avatarUrl":"https://a.png","picList":["https://cover.png","https://b.png"],
+		"productId":"1","productType":"blog"
 	}`
 	var raw rawHotItem
 	if err := json.Unmarshal([]byte(in), &raw); err != nil {
@@ -81,7 +85,10 @@ func TestHotFrom(t *testing.T) {
 	if h.Rank != 1 || h.Title != "A Go primer" || h.Author != "Alice" || h.Username != "alice" {
 		t.Errorf("hotFrom basics = %+v", h)
 	}
-	if h.Score != 900 || h.Views != 5600 || h.Comments != 12 || h.Favors != 34 {
+	if h.ID != "1" || h.Type != "blog" {
+		t.Errorf("hotFrom id/type = id=%q type=%q", h.ID, h.Type)
+	}
+	if h.Score != 24056 || h.Views != 5600 || h.Comments != 12 || h.Favors != 34 {
 		t.Errorf("hotFrom counts = %+v", h)
 	}
 	if h.URL != "https://blog.csdn.net/alice/article/details/1" {
@@ -92,9 +99,22 @@ func TestHotFrom(t *testing.T) {
 	}
 }
 
+func TestHotFromScoreFallback(t *testing.T) {
+	// When hotRankScore is absent, fall back to pcHotRankScore.
+	const in = `{"pcHotRankScore":"900","articleTitle":"T","productId":"2"}`
+	var raw rawHotItem
+	if err := json.Unmarshal([]byte(in), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if h := hotFrom(1, raw); h.Score != 900 {
+		t.Errorf("score fallback = %d", h.Score)
+	}
+}
+
 func TestHitFrom(t *testing.T) {
 	const in = `{
-		"title":"a <em>Go</em> guide","url":"https://blog.csdn.net/bob/article/details/2",
+		"title":"a <em>Go</em> guide",
+		"url":"https://blog.csdn.net/bob/article/details/2?ops_request_misc=x&utm_term=go",
 		"nickname":"Bob","username":"bob","view_num":1200,"digg":"7","comment":"3",
 		"collections":"40","create_time_str":"2024-08-09","tags":["go","web"],
 		"type":"blog","articleid":"2","description":"all about <em>Go</em>"
@@ -115,6 +135,51 @@ func TestHitFrom(t *testing.T) {
 	}
 	if h.Published != "2024-08-09" || len(h.Tags) != 2 || h.Tags[0] != "go" {
 		t.Errorf("hitFrom published/tags = %+v", h)
+	}
+	// The tracking query tail must be stripped to the canonical url.
+	if h.URL != "https://blog.csdn.net/bob/article/details/2" {
+		t.Errorf("hitFrom url not cleaned: %q", h.URL)
+	}
+}
+
+func TestPostFrom(t *testing.T) {
+	// postTime is the exact timestamp; formatTime is the fuzzy UI label. postFrom
+	// must keep the exact one and capture the cover from picList[0].
+	const in = `{
+		"articleId":161490560,"title":"OpenCV in practice","description":"  a body  ",
+		"url":"https://blog.csdn.net/u/article/details/161490560",
+		"top":true,"viewCount":679,"commentCount":35,"diggCount":45,"collectCount":45,
+		"postTime":"2026-06-13 16:23:43","formatTime":"前天 16:23",
+		"tags":["opencv","python"],"picList":["https://cover.png","https://b.png"]
+	}`
+	var raw rawBusinessItem
+	if err := json.Unmarshal([]byte(in), &raw); err != nil {
+		t.Fatal(err)
+	}
+	a := postFrom("u", raw)
+	if a.ID != "161490560" || a.Title != "OpenCV in practice" || a.Summary != "a body" {
+		t.Errorf("postFrom basics = %+v", a)
+	}
+	if a.Views != 679 || a.Comments != 35 || a.Likes != 45 || a.Collects != 45 {
+		t.Errorf("postFrom counts = %+v", a)
+	}
+	if !a.Pinned || a.Published != "2026-06-13 16:23:43" {
+		t.Errorf("postFrom pinned/published = pinned=%v published=%q", a.Pinned, a.Published)
+	}
+	if a.Cover != "https://cover.png" || len(a.Tags) != 2 || a.Tags[0] != "opencv" {
+		t.Errorf("postFrom cover/tags = cover=%q tags=%v", a.Cover, a.Tags)
+	}
+}
+
+func TestPostFromPublishedFallback(t *testing.T) {
+	// When postTime is absent, fall back to the formatTime label.
+	const in = `{"articleId":5,"formatTime":"前天 16:23"}`
+	var raw rawBusinessItem
+	if err := json.Unmarshal([]byte(in), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if a := postFrom("u", raw); a.Published != "前天 16:23" {
+		t.Errorf("published fallback = %q", a.Published)
 	}
 }
 

@@ -12,6 +12,8 @@ package csdn
 // Hot is one hot-rank board entry, ranked 1-based.
 type Hot struct {
 	Rank     int    `json:"rank"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
 	Title    string `json:"title" kit:"id" table:"title,truncate"`
 	Author   string `json:"author"`
 	Username string `json:"username"`
@@ -40,6 +42,7 @@ type Article struct {
 	Collects  int64    `json:"collects"`
 	Comments  int64    `json:"comments"`
 	Pinned    bool     `json:"pinned"`
+	Cover     string   `json:"cover"`
 	URL       string   `json:"url"`
 }
 

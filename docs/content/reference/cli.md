@@ -50,8 +50,10 @@ Flags:
       --type string   rank board type
 ```
 
-Fields: `rank`, `title`, `author`, `username`, `score`, `views`, `comments`,
-`favors`, `url`.
+Fields: `rank`, `id`, `type`, `title`, `author`, `username`, `score`, `views`,
+`comments`, `favors`, `url`, `cover`, `avatar`. The `id` is the article id and
+`type` its kind (`blog`), so a hot row can be passed straight to `article` or
+`comments`.
 
 The hot-rank board answers a plain anonymous GET and returns real data. `-n`
 caps the rows (default 25).
@@ -69,9 +71,10 @@ Flags:
       --type string   search type: blog|all|ask|download|bbs
 ```
 
-Fields: `type`, `id`, `title`, `author`, `username`, `summary`, `views`, `likes`,
-`comments`, `url`. The `--type` flag chooses the search index and defaults to
-`blog`.
+Fields: `type`, `id`, `title`, `author`, `username`, `summary`, `published`,
+`tags`, `views`, `likes`, `collects`, `comments`, `url`. The url is the canonical
+article link, with CSDN's search tracking query stripped. The `--type` flag
+chooses the search index and defaults to `blog`.
 
 ### csdn article
 
@@ -86,7 +89,11 @@ Usage:
 ```
 
 Fields: `id`, `title`, `author`, `username`, `summary`, `content`, `tags`,
-`published`, `updated`, `views`, `likes`, `collects`, `comments`, `url`.
+`published`, `updated`, `views`, `likes`, `collects`, `comments`, `pinned`,
+`cover`, `url`. A direct article fetch leaves `cover` empty (CSDN's article pages
+carry no cover meta); it is filled when the article is listed through `posts`.
+The counters are read from the page toolbar (`#blog-digg-num` for likes, the
+`#get-collection` `data-num` for collects, `.unlogin-comment-tit` for comments).
 
 ### csdn user
 
@@ -106,15 +113,18 @@ Fields: `username`, `nickname`, `intro`, `level`, `code_age`, `region`,
 
 ### csdn posts
 
-A user's published articles. Accepts the same input as `user`. Emits `SearchHit`
-records.
+A user's published articles. Accepts the same input as `user`. Emits `Article`
+records (the same shape as `article`, without the body).
 
 ```
 Usage:
   csdn posts <username-or-url> [flags]
 ```
 
-`-n` caps the rows (default 40).
+Fields: `id`, `title`, `username`, `summary`, `tags`, `published`, `views`,
+`likes`, `collects`, `comments`, `pinned`, `cover`, `url`. `published` is the
+exact post timestamp, `pinned` marks an article the author stuck to the top, and
+`cover` is the article's cover image. `-n` caps the rows (default 40).
 
 ### csdn comments
 
@@ -128,7 +138,10 @@ Usage:
 ```
 
 Fields: `id`, `article_id`, `text`, `author`, `nickname`, `parent_id`,
-`post_time`, `likes`, `region`, `url`. `-n` caps the rows (default 50).
+`parent_nick`, `post_time`, `likes`, `region`, `avatar`, `url`. Threads are
+flattened: a top-level comment is followed by its replies (which CSDN nests under
+`sub`), and a reply carries the `parent_id` and `parent_nick` of the comment it
+answers. `-n` caps the rows (default 50).
 
 This is the surface most likely to be walled from a datacenter IP. When the
 edge serves a challenge it exits 4 (needs auth) rather than printing nothing as

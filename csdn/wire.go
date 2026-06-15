@@ -70,12 +70,17 @@ type rawHotItem struct {
 	ViewCount        flexInt  `json:"viewCount"`
 	AvatarURL        string   `json:"avatarUrl"`
 	PicList          []string `json:"picList"`
+	ProductID        string   `json:"productId"`
+	ProductType      string   `json:"productType"`
 }
 
 func hotFrom(rank int, it rawHotItem) Hot {
-	score := int64(it.PcHotRankScore)
+	// hotRankScore is the exact integer (e.g. "24056"); pcHotRankScore is the
+	// display form CSDN shows on the board ("2.4w"), which is lossy and does not
+	// parse as a number, so prefer the exact one and fall back only if absent.
+	score := int64(it.HotRankScore)
 	if score == 0 {
-		score = int64(it.HotRankScore)
+		score = int64(it.PcHotRankScore)
 	}
 	cover := ""
 	if len(it.PicList) > 0 {
@@ -83,6 +88,8 @@ func hotFrom(rank int, it rawHotItem) Hot {
 	}
 	return Hot{
 		Rank:     rank,
+		ID:       it.ProductID,
+		Type:     it.ProductType,
 		Title:    it.ArticleTitle,
 		Author:   it.NickName,
 		Username: it.UserName,
@@ -147,8 +154,18 @@ func hitFrom(h rawSearchHit) SearchHit {
 		Likes:     int64(h.Digg),
 		Collects:  int64(h.Collections),
 		Comments:  int64(h.Comment),
-		URL:       h.URL,
+		URL:       cleanURL(h.URL),
 	}
+}
+
+// cleanURL drops the query string and fragment from a result url. CSDN's search
+// hands back the article link with a long ops_request_misc/utm tracking tail;
+// trimming it leaves the canonical scheme://host/path that addresses the page.
+func cleanURL(s string) string {
+	if i := strings.IndexAny(s, "?#"); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
 
 // --- article (parsed from HTML + JSON-LD) ---
@@ -337,19 +354,20 @@ type rawBusinessResp struct {
 }
 
 type rawBusinessItem struct {
-	ArticleID    flexInt `json:"articleId"`
-	Title        string  `json:"title"`
-	Description  string  `json:"description"`
-	URL          string  `json:"url"`
-	Type         flexInt `json:"type"`
-	Top          bool    `json:"top"`
-	ViewCount    flexInt `json:"viewCount"`
-	CommentCount flexInt `json:"commentCount"`
-	DiggCount    flexInt `json:"diggCount"`
-	CollectCount flexInt `json:"collectCount"`
-	PostTime     string  `json:"postTime"`
-	FormatTime   string  `json:"formatTime"`
-	Tags         rawTags `json:"tags"`
+	ArticleID    flexInt  `json:"articleId"`
+	Title        string   `json:"title"`
+	Description  string   `json:"description"`
+	URL          string   `json:"url"`
+	Type         flexInt  `json:"type"`
+	Top          bool     `json:"top"`
+	ViewCount    flexInt  `json:"viewCount"`
+	CommentCount flexInt  `json:"commentCount"`
+	DiggCount    flexInt  `json:"diggCount"`
+	CollectCount flexInt  `json:"collectCount"`
+	PostTime     string   `json:"postTime"`
+	FormatTime   string   `json:"formatTime"`
+	Tags         rawTags  `json:"tags"`
+	PicList      []string `json:"picList"`
 }
 
 // rawTags captures the article tag list, which CSDN sends as an array of objects
@@ -397,9 +415,16 @@ func postFrom(username string, it rawBusinessItem) Article {
 	if url == "" {
 		url = articleURL(username, id)
 	}
-	published := it.FormatTime
+	// postTime is the exact timestamp ("2026-06-13 16:23:43"); formatTime is the
+	// fuzzy label the UI shows ("前天 16:23"), which loses the real date, so keep
+	// the exact one and fall back to the label only if it is missing.
+	published := it.PostTime
 	if published == "" {
-		published = it.PostTime
+		published = it.FormatTime
+	}
+	cover := ""
+	if len(it.PicList) > 0 {
+		cover = it.PicList[0]
 	}
 	return Article{
 		ID:        id,
@@ -413,6 +438,7 @@ func postFrom(username string, it rawBusinessItem) Article {
 		Collects:  int64(it.CollectCount),
 		Comments:  int64(it.CommentCount),
 		Pinned:    it.Top,
+		Cover:     cover,
 		URL:       url,
 	}
 }
